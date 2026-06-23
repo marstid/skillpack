@@ -190,11 +190,14 @@ type readResourceInput struct {
 	Path string `json:"path" jsonschema:"the file path relative to the skill directory (e.g. references/rules.md)"`
 }
 
-// readResourceOutput is the structured output of read_resource.
+// readResourceOutput is the structured output of read_resource. Content is
+// included in the structured output because some harnesses only surface the
+// structured output to the agent, not the CallToolResult.Content field.
 type readResourceOutput struct {
 	Name     string `json:"name"`
 	Path     string `json:"path"`
 	MIMEType string `json:"mime_type"`
+	Content  string `json:"content"`
 }
 
 func readResourceHandler(store *skill.Store) mcp.ToolHandlerFor[readResourceInput, readResourceOutput] {
@@ -203,7 +206,7 @@ func readResourceHandler(store *skill.Store) mcp.ToolHandlerFor[readResourceInpu
 		if err != nil {
 			return nil, readResourceOutput{}, err
 		}
-		out := readResourceOutput{Name: in.Name, Path: in.Path, MIMEType: mime}
+		out := readResourceOutput{Name: in.Name, Path: in.Path, MIMEType: mime, Content: string(data)}
 		res := &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 		}

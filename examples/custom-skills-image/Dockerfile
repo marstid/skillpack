@@ -25,4 +25,4 @@ COPY commands/ /commands/
 # Serve the custom trees over HTTP. Use --merge-skills / --merge-commands here
 # instead of the bare --skills-dir / --commands-dir flags to keep the embedded
 # example skills alongside your own (your entries win on name collisions).
-CMD ["--skills-dir", "/skills", "--commands-dir", "/commands", "--transport", "http", "--addr", ":8080", "--log-level", "info"]
+CMD ["--skills-dir", "/skills", "--commands-dir", "/commands", "--transport", "http", "--addr", ":8080", "--log-level", "debug"]
