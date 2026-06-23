@@ -12,6 +12,10 @@ examples/custom-skills-image/
 ├── Dockerfile          # Builds on ghcr.io/marstid/skillpack:latest
 ├── workflow.yaml       # Sample GitHub Actions pipeline (copy to .github/workflows/)
 ├── skills/
+│   ├── chess/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── rules.md
 │   ├── logs-triage/
 │   │   ├── SKILL.md
 │   │   └── references/
@@ -24,9 +28,26 @@ examples/custom-skills-image/
 └── README.md           # this file
 ```
 
-The sample skills (`logs-triage`, `metrics-query`) and command
+The sample skills (`chess`, `logs-triage`, `metrics-query`) and command
 (`incident-report`) are intentionally small but follow the agentskills.io
 format with all frontmatter fields exercised.
+
+### Validate a skill was picked up
+
+The easiest skill to validate end-to-end is **`chess`**. Its description
+contains plain, recognizable trigger terms ("play chess", "make a chess
+move"), so when you ask any connected agent "Let's play chess", the agent
+should call `activate_skill` with `name: "chess"` and pull the guide (and the
+bundled `references/rules.md` when a rule question comes up). If the skill is
+missing, `list_skills` returns nothing for `query: "chess"` instead.
+
+Quick boot-time check:
+```sh
+podman run --rm -p 8080:8080 skillpack-custom
+# In the stderr log you should see:
+#   level=INFO msg=loaded skills=3 commands=1 skills_source=/skills ...
+# `(logs-triage, metrics-query, chess) plus the incident-report command.
+```
 
 ## Build the image locally
 
