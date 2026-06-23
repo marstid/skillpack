@@ -1,0 +1,30 @@
+# Binaries
+/skillpack
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.out
+coverage.txt
+coverage.html
+
+# Dependency directories (not used by fac, but standard Go hygiene)
+/vendor/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
