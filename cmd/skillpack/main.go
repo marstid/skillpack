@@ -44,13 +44,22 @@ func main() {
 	mergeSkills := flag.Bool("merge-skills", false, "merge --skills-dir on top of the embedded skills/ tree (user entries win on name collisions); otherwise --skills-dir fully replaces the embedded tree")
 	commandsDir := flag.String("commands-dir", "", "external commands directory that fully replaces the embedded commands/ tree (use --merge-commands to merge instead)")
 	mergeCommands := flag.Bool("merge-commands", false, "merge --commands-dir on top of the embedded commands/ tree (user entries win on name collisions); otherwise --commands-dir fully replaces the embedded tree")
-	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
+	logLevel := flag.String("log-level", "", "log level: debug, info, warn, error (overrides $LOG_LEVEL; default info)")
 	flag.Parse()
+
+	// Resolve log level: --log-level wins, then $LOG_LEVEL, then "info".
+	levelStr := *logLevel
+	if levelStr == "" {
+		levelStr = os.Getenv("LOG_LEVEL")
+	}
+	if levelStr == "" {
+		levelStr = "info"
+	}
 
 	// In stdio mode, stdout is the MCP transport — all logging must go to
 	// stderr to avoid corrupting the protocol channel.
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: parseLogLevel(*logLevel),
+		Level: parseLogLevel(levelStr),
 	}))
 	slog.SetDefault(logger)
 
