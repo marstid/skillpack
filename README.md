@@ -243,6 +243,8 @@ The `Dockerfile` is multi-stage: a `golang:1.26.4-alpine` builder produces a sta
 
 ## Use case: Custom skills image via your own skills repo
 
+> A **runnable version** of this recipe — with sample skills and commands — lives in [`examples/custom-skills-image/`](examples/custom-skills-image/). Clone it and `podman build .` to try it end-to-end.
+
 The recommended pattern for a team or organization is to maintain a **separate skills repo** (e.g. `github.com/yourorg/skills`) containing your `skills/` and `commands/` trees. On every push to `main`, CI builds a custom image `FROM` the published skillpack image, copies your trees in, and pushes to your registry namespace. Users then point their MCP client at the custom image — no rebuilding skillpack itself.
 
 ### 1. Your skills repo layout
@@ -272,11 +274,10 @@ FROM ghcr.io/marstid/skillpack:latest
 COPY skills/   /skills/
 COPY commands/ /commands/
 
-CMD ["--skills-dir", "/skills", "--commands-dir", "/commands",
-     "--transport", "http", "--addr", ":8080", "--log-level", "info"]
+CMD ["--skills-dir", "/skills", "--commands-dir", "/commands", "--transport", "http", "--addr", ":8080", "--log-level", "info"]
 ```
 
-> **Merge instead of replace.** If you want the embedded example skills to remain available alongside your own, use `--merge-skills --merge-commands` in `CMD` instead of the bare `--skills-dir`/`--commands-dir` flags. Your skills will shadow any embedded name collisions.
+> **Merge instead of replace.** If you want the embedded example skills to remain available alongside your own, replace the bare `--skills-dir`/`--commands-dir` flags in `CMD` with `--merge-skills --merge-commands` (pointing the flags at your `/skills` and `/commands` paths). Your skills will shadow any embedded name collisions.
 
 ### 3. GitHub Actions workflow (in your skills repo)
 

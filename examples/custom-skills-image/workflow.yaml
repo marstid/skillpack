@@ -1,0 +1,52 @@
+# Sample CI workflow for the custom-skills image example.
+#
+# This is the same workflow shown in the top-level README. In a real skills
+# repo it lives at `.github/workflows/build-and-push.yaml` under the repo
+# root. It's placed here as a runnable example so you can copy it verbatim.
+#
+# Replace `yourorg` with your GitHub owner name throughout. The workflow runs on
+# every push to `main` (i.e. each PR merge), builds the Dockerfile in the repo
+# root, and publishes to your ghcr.io namespace.
+
+name: build-and-push-image
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/yourorg/skillpack-skills
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          sha="$(git rev-parse --short=8 HEAD)"
+          echo "tags=$IMAGE:latest,$IMAGE:sha-$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=registry,ref=ghcr.io/yourorg/skillpack-skills:buildcache
+          cache-to: type=registry,ref=ghcr.io/yourorg/skillpack-skills:buildcache,mode=max
