@@ -16,8 +16,12 @@ ADDR     ?= :8080
 TRANSPORT ?= http
 LOGLEVEL ?= info
 GOFLAGS  ?= -trimpath
-BUILD_FLAGS ?= $(GOFLAGS)
+BUILD_FLAGS ?= $(GOFLAGS) -ldflags "$(LDFLAGS)"
 TEST_FLAGS ?=
+
+# Build stamp: YYYYMMDD_shorthash (e.g. 20260623_4d64bf7).
+BUILD ?= $(shell git log -1 --format=%cd_%h --date=format:%Y%m%d 2>/dev/null || echo dev)
+LDFLAGS  ?= -s -w -X github.com/marstid/skillpack/internal/mcp.Build=$(BUILD)
 
 # Container image build. Podman is the default; override with CONTAINER=docker.
 CONTAINER ?= podman

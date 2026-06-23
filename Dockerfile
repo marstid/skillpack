@@ -27,7 +27,9 @@
 FROM golang:1.26.4-alpine AS builder
 
 # VERSION is stamped into the binary via ldflags; defaults to "dev".
+# BUILD is stamped as YYYYMMDD_shorthash from the git commit being built.
 ARG VERSION=dev
+ARG BUILD=dev
 
 WORKDIR /src
 
@@ -45,7 +47,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build \
       -trimpath \
-      -ldflags "-s -w -X github.com/marstid/skillpack/internal/mcp.Version=${VERSION}" \
+      -ldflags "-s -w -X github.com/marstid/skillpack/internal/mcp.Version=${VERSION} -X github.com/marstid/skillpack/internal/mcp.Build=${BUILD}" \
       -o /out/skillpack \
       ./cmd/skillpack
 

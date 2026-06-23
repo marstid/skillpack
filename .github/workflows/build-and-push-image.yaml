@@ -61,7 +61,10 @@ jobs:
         run: |
           set -eu
           sha="$(git rev-parse --short=8 HEAD)"
+          date="$(git log -1 --format=%cd --date=format:%Y%m%d)"
+          build="${date}_${sha}"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
           taglist="$IMAGE:latest,$IMAGE:sha-$sha"
           # If the push carries a lightweight git tag like v0.1.0, also emit
           # a stripped semver image tag (e.g. 0.1.0).
@@ -81,6 +84,7 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             VERSION=${{ steps.tags.outputs.sha }}
+            BUILD=${{ steps.tags.outputs.build }}
           # Cache the (Go) module download + build layers across runs using a
           # ghcr.io-scoped cache ref — ends up next to the image itself.
           cache-from: type=registry,ref=ghcr.io/marstid/skillpack:buildcache

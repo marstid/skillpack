@@ -80,7 +80,8 @@ func main() {
 	}
 	logger.Info("loaded", "skills", len(skStore.List()), "commands", len(cmdStore.List()),
 		"skills_source", skillsSourceLabel, "skills_merge", skillsMerge,
-		"commands_source", commandsSourceLabel, "commands_merge", commandsMerge)
+		"commands_source", commandsSourceLabel, "commands_merge", commandsMerge,
+		"version", skillpackmcp.Version, "build", skillpackmcp.Build)
 
 	srv := skillpackmcp.New(skStore, cmdStore)
 
