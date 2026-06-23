@@ -101,7 +101,12 @@ func TestIntegration_ListAndActivateSkill(t *testing.T) {
 		t.Fatalf("activate_skill returned tool error: %+v", actres)
 	}
 	body := contentText(actres)
-	for _, want := range []string{"<skill_content name=\"markdown-lint\">", "references/rules.md", "Relative paths in this skill"} {
+	for _, want := range []string{
+		"<skill_content name=\"markdown-lint\">",
+		"references/rules.md",
+		"skill://markdown-lint/references/rules.md",
+		"do NOT read them from the local filesystem",
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("activate_skill output missing %q; got: %s", want, body)
 		}
@@ -255,6 +260,40 @@ func TestIntegration_PromptRender(t *testing.T) {
 	}
 	if strings.Contains(text2, "in scope") {
 		t.Errorf("{{#if}} should collapse when scope absent: %s", text2)
+	}
+}
+
+func TestIntegration_Instructions(t *testing.T) {
+	session, cleanup := startServer(t)
+	defer cleanup()
+
+	res := session.InitializeResult()
+	if res == nil {
+		t.Fatal("InitializeResult is nil")
+	}
+	instr := res.Instructions
+	if instr == "" {
+		t.Fatal("server instructions are empty")
+	}
+
+	for _, want := range []string{
+		"markdown-lint",
+		"proactively call `activate_skill`",
+		"Available skills:",
+		"Do NOT read bundled resources from the local filesystem",
+	} {
+		if !strings.Contains(instr, want) {
+			t.Errorf("instructions missing %q; got: %s", want, instr)
+		}
+	}
+
+	for _, want := range []string{
+		"commit",
+		"Available commands:",
+	} {
+		if !strings.Contains(instr, want) {
+			t.Errorf("instructions missing %q; got: %s", want, instr)
+		}
 	}
 }
 

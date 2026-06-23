@@ -70,8 +70,8 @@ func activateSkillDescription(store *skill.Store) string {
 	b.WriteString("Activate an Agent Skill by name to load its instructions into context. ")
 	b.WriteString("By default returns the skill body wrapped in <skill_content> tags plus a <skill_resources> listing of bundled files. ")
 	b.WriteString("Set header_only=true to get a cheap preview: the <skill_header> block (frontmatter metadata + resource manifest, no body). ")
-	b.WriteString("Read bundled resources on demand via the `skill://<name>/<path>` resource. ")
-	b.WriteString("Relative paths in the skill resolve against the skill directory.\n\n")
+	b.WriteString("Read bundled resources on demand via the `skill://<name>/<path>` resource URI — do NOT read them from the local filesystem. ")
+	b.WriteString("The <skill_resources> block lists each file with its full `skill://` URI.\n\n")
 	b.WriteString("Available skills:\n")
 	for _, e := range store.List() {
 		fmt.Fprintf(&b, "- %s: %s\n", e.Name, e.Description)
@@ -91,8 +91,8 @@ func activateSkillHandler(store *skill.Store) mcp.ToolHandlerFor[activateSkillIn
 		} else {
 			fmt.Fprintf(&b, "<skill_content name=%q>\n", sk.Name)
 			b.WriteString(sk.Body)
-			b.WriteString("\n\nRelative paths in this skill are relative to the skill directory.\n")
-			writeResourceListing(&b, sk.Resources)
+			b.WriteString("\n\nRead bundled resources using the `skill://` resource URIs listed below — do NOT read them from the local filesystem.\n")
+			writeResourceListing(&b, sk.Name, sk.Resources)
 			b.WriteString("</skill_content>")
 		}
 		out := activateSkillOutput{Name: sk.Name, HeaderOnly: in.HeaderOnly, Resources: sk.Resources}
@@ -125,18 +125,20 @@ func writeSkillHeader(b *strings.Builder, sk *skill.Skill) {
 	if strings.TrimSpace(sk.AllowedTools) != "" {
 		fmt.Fprintf(b, "allowed-tools: %s\n", sk.AllowedTools)
 	}
-	writeResourceListing(b, sk.Resources)
+	writeResourceListing(b, sk.Name, sk.Resources)
 	b.WriteString("</skill_header>")
 }
 
 // writeResourceListing emits the <skill_resources> block when resources exist.
-func writeResourceListing(b *strings.Builder, resources []string) {
+// Each file is listed as a full skill:// URI so the agent reads it via the MCP
+// resource protocol rather than attempting local filesystem reads.
+func writeResourceListing(b *strings.Builder, skillName string, resources []string) {
 	if len(resources) == 0 {
 		return
 	}
 	b.WriteString("<skill_resources>\n")
 	for _, r := range resources {
-		fmt.Fprintf(b, "  <file>%s</file>\n", r)
+		fmt.Fprintf(b, "  <file uri=\"skill://%s/%s\">%s</file>\n", skillName, r, r)
 	}
 	b.WriteString("</skill_resources>\n")
 }
