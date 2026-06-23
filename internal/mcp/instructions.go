@@ -34,8 +34,8 @@ func serverInstructions(sk *skill.Store, cmd *command.Store) string {
 
 	b.WriteString("## Skill tools\n")
 	b.WriteString("- `activate_skill` — load a skill's full instructions into context (supports `header_only` for a cheap preview).\n")
-	b.WriteString("- `list_skills` — list available skills as JSON with optional fuzzy search.\n")
-	b.WriteString("- Resources `skill://<name>/<path>` — read bundled files via the MCP resource protocol. When `activate_skill` returns a `<skill_resources>` block, use the listed `skill://` URIs to read each file. Do NOT read bundled resources from the local filesystem.\n\n")
+	b.WriteString("- `read_resource` — call this after `activate_skill` to read any bundled file referenced in the skill instructions. Pass the skill name and the relative file path (e.g. `references/rules.md`). Do NOT read bundled skill files from the local filesystem.\n")
+	b.WriteString("- `list_skills` — list available skills as JSON with optional fuzzy search.\n\n")
 
 	b.WriteString("## Commands\n\n")
 	cmds := cmd.List()
@@ -50,6 +50,6 @@ func serverInstructions(sk *skill.Store, cmd *command.Store) string {
 	}
 	b.WriteString("Prompts (`prompts/list`) expose skillpack commands; invoke with arguments to get a rendered user message.\n\n")
 
-	b.WriteString("Use progressive disclosure: call `list_skills`, then `activate_skill` for the relevant one, and read bundled resources only when the instructions reference them.")
+	b.WriteString("Use progressive disclosure: call `list_skills`, then `activate_skill` for the relevant one, and use `read_resource` to load bundled files only when the skill instructions reference them.")
 	return b.String()
 }

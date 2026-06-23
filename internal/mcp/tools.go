@@ -11,10 +11,11 @@ import (
 	"github.com/marstid/skillpack/internal/skill"
 )
 
-// registerTools installs the activate_skill and list_skills tools on the
-// server. The catalog of available skills (tier-1 disclosure, ~50-100 tokens
-// per skill) is embedded directly in the activate_skill tool description, so
-// the model can pick a valid name without a separate discovery call.
+// registerTools installs the activate_skill, list_skills, and read_resource
+// tools on the server. The catalog of available skills (tier-1 disclosure,
+// ~50-100 tokens per skill) is embedded directly in the activate_skill tool
+// description, so the model can pick a valid name without a separate discovery
+// call.
 func registerTools(srv *mcp.Server, store *skill.Store) {
 	mcp.AddTool(srv,
 		&mcp.Tool{
@@ -34,6 +35,16 @@ func registerTools(srv *mcp.Server, store *skill.Store) {
 			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		},
 		listSkillsHandler(store),
+	)
+
+	mcp.AddTool(srv,
+		&mcp.Tool{
+			Name:        "read_resource",
+			Title:       "Read a bundled skill resource file",
+			Description: "Read a bundled file from an activated Agent Skill. Call this after activate_skill when the skill instructions or the <skill_resources> block references a file. Pass the skill name and the relative file path (e.g. name=\"chess\", path=\"references/rules.md\").",
+			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		},
+		readResourceHandler(store),
 	)
 }
 
@@ -70,8 +81,8 @@ func activateSkillDescription(store *skill.Store) string {
 	b.WriteString("Activate an Agent Skill by name to load its instructions into context. ")
 	b.WriteString("By default returns the skill body wrapped in <skill_content> tags plus a <skill_resources> listing of bundled files. ")
 	b.WriteString("Set header_only=true to get a cheap preview: the <skill_header> block (frontmatter metadata + resource manifest, no body). ")
-	b.WriteString("Read bundled resources on demand via the `skill://<name>/<path>` resource URI — do NOT read them from the local filesystem. ")
-	b.WriteString("The <skill_resources> block lists each file with its full `skill://` URI.\n\n")
+	b.WriteString("Read bundled resources on demand via the `read_resource` tool — do NOT read them from the local filesystem. ")
+	b.WriteString("The <skill_resources> block lists each file with its name and path you can pass to `read_resource`.\n\n")
 	b.WriteString("Available skills:\n")
 	for _, e := range store.List() {
 		fmt.Fprintf(&b, "- %s: %s\n", e.Name, e.Description)
@@ -91,7 +102,7 @@ func activateSkillHandler(store *skill.Store) mcp.ToolHandlerFor[activateSkillIn
 		} else {
 			fmt.Fprintf(&b, "<skill_content name=%q>\n", sk.Name)
 			b.WriteString(sk.Body)
-			b.WriteString("\n\nRead bundled resources using the `skill://` resource URIs listed below — do NOT read them from the local filesystem.\n")
+			b.WriteString("\n\nTo read a bundled file listed below, call `read_resource` with the skill name and the file path (e.g. `name=\"markdown-lint\"`, `path=\"references/rules.md\"`). Do NOT read bundled skill files from the local filesystem.\n")
 			writeResourceListing(&b, sk.Name, sk.Resources)
 			b.WriteString("</skill_content>")
 		}
@@ -171,4 +182,31 @@ func skillNames(store *skill.Store) []string {
 		out[i] = e.Name
 	}
 	return out
+}
+
+// readResourceInput is the typed input for read_resource.
+type readResourceInput struct {
+	Name string `json:"name" jsonschema:"the skill name"`
+	Path string `json:"path" jsonschema:"the file path relative to the skill directory (e.g. references/rules.md)"`
+}
+
+// readResourceOutput is the structured output of read_resource.
+type readResourceOutput struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	MIMEType string `json:"mime_type"`
+}
+
+func readResourceHandler(store *skill.Store) mcp.ToolHandlerFor[readResourceInput, readResourceOutput] {
+	return func(_ context.Context, _ *mcp.CallToolRequest, in readResourceInput) (*mcp.CallToolResult, readResourceOutput, error) {
+		data, mime, err := store.ReadResource(in.Name, in.Path)
+		if err != nil {
+			return nil, readResourceOutput{}, err
+		}
+		out := readResourceOutput{Name: in.Name, Path: in.Path, MIMEType: mime}
+		res := &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
+		}
+		return res, out, nil
+	}
 }

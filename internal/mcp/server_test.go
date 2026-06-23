@@ -68,8 +68,8 @@ func TestIntegration_ListAndActivateSkill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if !hasTool(tools.Tools, "activate_skill") || !hasTool(tools.Tools, "list_skills") {
-		t.Fatalf("expected activate_skill and list_skills, got: %+v", toolNames(tools.Tools))
+	if !hasTool(tools.Tools, "activate_skill") || !hasTool(tools.Tools, "list_skills") || !hasTool(tools.Tools, "read_resource") {
+		t.Fatalf("expected activate_skill, list_skills, read_resource; got: %+v", toolNames(tools.Tools))
 	}
 
 	// list_skills should include the seeded markdown-lint skill.
@@ -105,7 +105,7 @@ func TestIntegration_ListAndActivateSkill(t *testing.T) {
 		"<skill_content name=\"markdown-lint\">",
 		"references/rules.md",
 		"skill://markdown-lint/references/rules.md",
-		"do NOT read them from the local filesystem",
+		"call `read_resource`",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("activate_skill output missing %q; got: %s", want, body)
@@ -263,6 +263,52 @@ func TestIntegration_PromptRender(t *testing.T) {
 	}
 }
 
+func TestIntegration_ReadResourceTool(t *testing.T) {
+	ctx := context.Background()
+	session, cleanup := startServer(t)
+	defer cleanup()
+
+	tools, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if !hasTool(tools.Tools, "read_resource") {
+		t.Fatalf("read_resource tool not found: %+v", toolNames(tools.Tools))
+	}
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "read_resource",
+		Arguments: map[string]any{
+			"name": "markdown-lint",
+			"path": "references/rules.md",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool read_resource: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("read_resource returned tool error: %+v", res)
+	}
+	body := contentText(res)
+	if !strings.Contains(body, "Markdown Lint Rules") {
+		t.Errorf("read_resource output missing expected content: %s", body)
+	}
+
+	errRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "read_resource",
+		Arguments: map[string]any{
+			"name": "nonexistent",
+			"path": "foo.md",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool read_resource (nonexistent): %v", err)
+	}
+	if !errRes.IsError {
+		t.Error("expected IsError for nonexistent skill, got success")
+	}
+}
+
 func TestIntegration_Instructions(t *testing.T) {
 	session, cleanup := startServer(t)
 	defer cleanup()
@@ -280,7 +326,8 @@ func TestIntegration_Instructions(t *testing.T) {
 		"markdown-lint",
 		"proactively call `activate_skill`",
 		"Available skills:",
-		"Do NOT read bundled resources from the local filesystem",
+		"`read_resource`",
+		"Do NOT read bundled",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Errorf("instructions missing %q; got: %s", want, instr)
