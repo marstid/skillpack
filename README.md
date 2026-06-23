@@ -332,7 +332,9 @@ Replace `yourorg` with your GitHub owner name. The workflow runs `go test` is no
 
 ### 4. Connect clients to the custom image
 
-**stdio (Claude Desktop):**
+How you connect depends on your MCP client and whether the image runs locally or on a remote host.
+
+#### Claude Desktop (stdio — local container)
 
 ```json
 {
@@ -345,12 +347,132 @@ Replace `yourorg` with your GitHub owner name. The workflow runs `go test` is no
 }
 ```
 
-**HTTP:**
+If you built a local binary instead, swap the `command`/`args`:
+```json
+{
+  "mcpServers": {
+    "skills": {
+      "command": "/path/to/skillpack",
+      "args": ["--skills-dir", "/path/to/skills", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+#### Claude Desktop (HTTP — local or remote)
+
+```json
+{
+  "mcpServers": {
+    "skills": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+For a remote server, replace `localhost:8080` with the host and port where the container is deployed (e.g. `https://skills.yourorg.com/mcp`). See [Deploying to a remote host](#deploying-to-a-remote-host) below.
+
+#### Cursor (HTTP — local or remote)
+
+Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+```json
+{
+  "mcpServers": {
+    "skills": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+#### OpenCode (local container via stdio)
+
+Add to your `opencode.json` or `opencode.jsonc` (see the [OpenCode MCP docs](https://opencode.ai/docs/mcp-servers/)):
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "skills": {
+      "type": "local",
+      "command": ["podman", "run", "--rm", "-i", "ghcr.io/yourorg/skillpack-skills:latest", "--transport", "stdio"],
+      "enabled": true
+    }
+  }
+}
+```
+
+#### OpenCode (remote HTTP)
+
+For a remote deployment, use `type: "remote"` pointing at the server's HTTP endpoint:
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "skills": {
+      "type": "remote",
+      "url": "https://skills.yourorg.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+If the endpoint requires an API key or bearer token, add a `headers` block:
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "skills": {
+      "type": "remote",
+      "url": "https://skills.yourorg.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:SKILLPACK_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+> **Tip:** You can also inject skills into OpenCode via an `AGENTS.md` rule so the agent uses them proactively:
+> ```
+> When you need domain guidance for logs, metrics, or incidents, use the `skills` MCP tools.
+> ```
+
+#### Deploying to a remote host
+
+For the remote configurations above, the container needs to be running on a server that's reachable from your machine — not just on `localhost`. A minimal setup:
 
 ```sh
-podman run --rm -p 8080:8080 ghcr.io/yourorg/skillpack-skills:latest
+# On the remote host (e.g. a cloud VM or a Kubernetes pod):
+podman run -d --name skillpack \
+  -p 8080:8080 \
+  --restart=unless-stopped \
+  ghcr.io/yourorg/skillpack-skills:latest
+
+# Or pin to a specific immutable tag:
+podman run -d --name skillpack \
+  -p 8080:8080 \
+  --restart=unless-stopped \
+  ghcr.io/yourorg/skillpack-skills:sha-a495dd4b
 ```
-Then connect your client to `http://localhost:8080/mcp`.
+
+Put a reverse proxy (Caddy, nginx, Traefik) in front for TLS and optional authentication. With Caddy:
+```
+skills.yourorg.com {
+  reverse_proxy localhost:8080
+}
+```
+Then point your MCP client at `https://skills.yourorg.com/mcp`.
+
+To update the running server when CI publishes a new image:
+```sh
+podman pull ghcr.io/yourorg/skillpack-skills:latest
+podman stop skillpack && podman rm skillpack
+podman run -d --name skillpack -p 8080:8080 --restart=unless-stopped \
+  ghcr.io/yourorg/skillpack-skills:latest
+```
 
 ### 5. Update flow
 
