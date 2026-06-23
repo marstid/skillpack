@@ -83,7 +83,7 @@ func main() {
 		"commands_source", commandsSourceLabel, "commands_merge", commandsMerge,
 		"version", skillpackmcp.Version, "build", skillpackmcp.Build)
 
-	srv := skillpackmcp.New(skStore, cmdStore)
+	srv := skillpackmcp.New(skStore, cmdStore, logger)
 
 	switch *transport {
 	case "http":

@@ -41,7 +41,7 @@ func startServer(t *testing.T) (*mcp.ClientSession, func()) {
 	if len(skStore.List()) == 0 {
 		t.Fatal("embedded skills tree produced no skills")
 	}
-	srv := skillpackmcp.New(skStore, cmdStore)
+	srv := skillpackmcp.New(skStore, cmdStore, nil)
 
 	serverT, clientT := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverT, nil)
