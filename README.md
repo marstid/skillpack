@@ -19,11 +19,36 @@ skillpack delivers skills through progressive disclosure, loading the cheapest s
 | 0 | `list_skills` — catalog (name + description) | ~50–100 / skill |
 | 1 | `activate_skill` with `header_only=true` — frontmatter + resource manifest, no body | small preview |
 | 2 | `activate_skill` — full body wrapped in `<skill_content>` | the actual guide |
-| 3 | `skill://<name>/<path>` resources — bundled files on demand | deep-dive references |
+| 3 | `read_resource` — read a bundled file by skill name + path | deep-dive references |
+
+The skill catalog (names + descriptions) is also embedded in the MCP server `instructions` field, so harnesses like OpenCode, Claude Desktop, and Cursor surface skills in the agent's initial context at `initialize` time — just like native skills — without requiring a `tools/list` round trip.
 
 A **command** is a parameterized prompt template (`COMMAND.md`) that maps 1:1 to an [MCP prompt](https://modelcontextprotocol.io/docs/concepts/prompts). Clients render them as slash commands with argument inputs.
 
-skillpack ships as a single static Go binary with the example `skills/` and `commands/` trees embedded via `//go:embed`. You can serve the embedded trees, override them with on-disk directories at runtime, or build a custom image from your own skills repo (see [Use case: Custom skills image](#use-case-custom-skills-image-via-your-own-skills-repo)).
+skillpack ships as a single static Go binary with the example `skills/` and `commands/` trees embedded via `//go:embed`. You can serve the embedded trees, override them with on-disk directories at runtime, or build a custom image from your own skills repo (see [Distributing skills across an organization](#distributing-skills-across-an-organization)).
+
+---
+
+## Distributing skills across an organization
+
+skillpack's primary use case is **centralized skill distribution** for teams and organizations. Instead of every developer maintaining their own copy of agent skills, a platform team maintains a single skills repo, and CI publishes a container image that everyone points their MCP client at.
+
+**How it works:**
+
+1. A platform team maintains a **skills repo** (`github.com/yourorg/skills`) containing `skills/` and `commands/` trees — curated, reviewed, version-controlled.
+2. On every push to `main`, CI builds a custom container image `FROM ghcr.io/marstid/skillpack:latest`, copies the skills/commands trees in, and pushes to the org's registry namespace.
+3. Developers, SREs, and on-call engineers point their MCP client (OpenCode, Claude Desktop, Cursor) at the custom image — locally via stdio or remotely via HTTP.
+4. Everyone gets the same skills. Updates propagate on the next `podman pull`. No one needs to clone the skills repo or rebuild anything.
+
+**Why this matters:**
+
+- **Consistency** — every agent in the org uses the same, reviewed skill definitions. No drift between team members.
+- **Progressive disclosure** — skills are loaded on-demand, so the agent only pays the token cost for the guidance it actually needs. The catalog is in the server `instructions` so the agent discovers skills proactively.
+- **No filesystem coupling** — skills and their bundled resources are read through MCP tools (`activate_skill`, `read_resource`), not from the local filesystem. Works identically whether the server runs locally via stdio or remotely via HTTP.
+- **Read-only and safe** — skillpack never writes to your filesystem or executes code. It only serves discovery, activation, and resource reads.
+- **Versioning** — CI tags each build with `:latest` and `:sha-<commit>`. Pin to a specific commit for reproducibility, or track `:latest` for automatic updates.
+
+A **runnable example** with sample skills and commands lives in [`examples/custom-skills-image/`](examples/custom-skills-image/). The full recipe is in [Building a custom skills image](#building-a-custom-skills-image).
 
 ---
 
@@ -120,15 +145,17 @@ Add to `.cursor/mcp.json` in your project or `~/.cursor/mcp.json` globally:
 |------|---------|-------------|
 | `--transport` | `http` | MCP transport: `http` (Streamable HTTP) or `stdio` |
 | `--addr` | `:8080` | HTTP listen address (ignored when `--transport stdio`) |
-| `--log-level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `--log-level` | *info* | Log level: `debug`, `info`, `warn`, `error`. Overrides `$LOG_LEVEL`. |
 | `--skills-dir` | *embedded* | External skills directory (fully replaces the embedded `skills/` tree) |
 | `--commands-dir` | *embedded* | External commands directory (fully replaces the embedded `commands/` tree) |
 | `--merge-skills` | `false` | Merge `--skills-dir` *on top of* the embedded tree; user entries win on name collisions |
 | `--merge-commands` | `false` | Merge `--commands-dir` on top of the embedded tree; user entries win on collisions |
 
+**Environment variables.** `LOG_LEVEL` sets the log level (same values as `--log-level`). The flag takes precedence over the env var. Useful for container deployments where flags are inconvenient: `LOG_LEVEL=DEBUG podman run ...` or set `"environment": {"LOG_LEVEL": "DEBUG"}` in your MCP client config. At `DEBUG` level, every MCP request is logged with method, tool/resource/prompt name, session ID, and duration.
+
 **Merge vs. replace.** By default `--skills-dir` / `--commands-dir` fully replaces the embedded tree. Add `--merge-skills` / `--merge-commands` to walk the embedded tree first and the external one second, so your external skills add to (or shadow) the embedded set rather than replacing it. This lets you ship a curated baseline alongside team-specific overrides.
 
-**Logging.** All logs go to stderr (so stdio mode never corrupts the MCP transport on stdout). Validation failures — a skill missing its `description`, a name not matching its parent directory, a malformed `SKILL.md` — are logged at WARN level with `skill_dir` and `reason`; the offending skill is skipped and never appears in `list_skills`.
+**Logging.** All logs go to stderr (so stdio mode never corrupts the MCP transport on stdout). At `DEBUG` level, access logging shows every incoming MCP method with method name, session ID, tool/uri/prompt name, duration, and errors. Validation failures — a skill missing its `description`, a name not matching its parent directory, a malformed `SKILL.md` — are logged at WARN level with `skill_dir` and `reason`; the offending skill is skipped and never appears in `list_skills`.
 
 ---
 
@@ -171,7 +198,7 @@ When to use this skill: the user asks to lint or validate markdown documentation
 
 ### Bundled resources
 
-Every non-`SKILL.md` file under the skill directory is automatically discovered as a resource — not just conventional `references/`, `scripts/`, `assets/` folders. Resources are read on demand via the `skill://<name>/<path>` MCP resource URI and are *not* returned on skill activation (keeping the first hit small while allowing arbitrarily deep material).
+Every non-`SKILL.md` file under the skill directory is automatically discovered as a resource — not just conventional `references/`, `scripts/`, `assets/` folders. Resources are read on demand via the `read_resource` tool (passing the skill name and relative file path). The `activate_skill` response includes a `<skill_resources>` block listing each bundled file with its path. The file content is returned in the tool's structured output.
 
 See the example `skills/markdown-lint/` (with `references/rules.md`) shipped in this repo.
 
@@ -209,8 +236,9 @@ Analyze staged changes.
 | Tool | Description |
 |------|-------------|
 | `list_skills` | Returns the catalog (name + description) as JSON. Pass an optional `query` for case-insensitive fuzzy subsequence ranking over name + description. |
-| `activate_skill` | Loads a skill by `name`. Returns the full body in `<skill_content>` plus a `<skill_resources>` listing. Set `header_only=true` for a cheap tier-1 preview — the `<skill_header>` block with frontmatter metadata + resource manifest, no body. |
-| `resources` (`prompts/list`) | MCP resources at `skill://<name>/<path>` for any bundled file, plus a static `skill://<name>/SKILL.md` per skill. MCP prompts expose one per command — invoke with arguments to get a rendered user message. |
+| `activate_skill` | Loads a skill by `name`. Returns the full body in `<skill_content>` plus a `<skill_resources>` listing of bundled files. Set `header_only=true` for a cheap tier-1 preview — the `<skill_header>` block with frontmatter metadata + resource manifest, no body. |
+| `read_resource` | Reads a bundled file from an activated skill. Pass `name` (skill name) and `path` (relative file path, e.g. `references/rules.md`). Returns the file content in the structured output. Use this instead of reading from the local filesystem. |
+| `resources` / `prompts` | MCP resources at `skill://<name>/<path>` for any bundled file (for clients that support native resource reading), plus a static `skill://<name>/SKILL.md` per skill. MCP prompts expose one per command — invoke with arguments to get a rendered user message. |
 
 ---
 
@@ -237,15 +265,15 @@ make image-run-stdio # Run over stdio (interactive)
 make clean-all       # Remove binary + local image
 ```
 
-The `Dockerfile` is multi-stage: a `golang:1.26.4-alpine` builder produces a static, stripped binary, which is shipped on a `distroless/static-debian12:nonroot` runtime (~11 MB total, non-root, no shell). Build layer caching is available via a `:buildcache` image ref when using the GitHub Actions workflow.
+The `Dockerfile` is multi-stage: a `golang:1.26.4-alpine` builder produces a static, stripped binary, which is shipped on a `distroless/static-debian12:nonroot` runtime (~11 MB total, non-root, no shell). CI builds multi-platform images for `linux/amd64` and `linux/arm64`, so the published image works on both x86 and Apple Silicon. Build layer caching is available via a `:buildcache` image ref when using the GitHub Actions workflow.
 
 ---
 
-## Use case: Custom skills image via your own skills repo
+## Building a custom skills image
 
 > A **runnable version** of this recipe — with sample skills and commands — lives in [`examples/custom-skills-image/`](examples/custom-skills-image/). Clone it and `podman build .` to try it end-to-end.
 
-The recommended pattern for a team or organization is to maintain a **separate skills repo** (e.g. `github.com/yourorg/skills`) containing your `skills/` and `commands/` trees. On every push to `main`, CI builds a custom image `FROM` the published skillpack image, copies your trees in, and pushes to your registry namespace. Users then point their MCP client at the custom image — no rebuilding skillpack itself.
+This is the detailed recipe for [distributing skills across an organization](#distributing-skills-across-an-organization). Your skills repo contains your `skills/` and `commands/` trees. On every push to `main`, CI builds a custom image `FROM` the published skillpack image, copies your trees in, and pushes to your registry namespace.
 
 ### 1. Your skills repo layout
 
@@ -476,7 +504,7 @@ podman run -d --name skillpack -p 8080:8080 --restart=unless-stopped \
 
 ### 5. Update flow
 
-When a teammate updates a skill in the `skills/` repo and merges the PR to `main`, CI rebuilds and pushes a new `:latest` + `:sha-<commit>` image. Users running the `:latest` tag get the update on their next container pull; users pinning a `:sha-<commit>` tag stay on that exact version until they explicitly bump.
+When a teammate updates a skill in the `skills/` repo and merges the PR to `main`, CI rebuilds and pushes a new `:latest` + `:sha-<commit>` image. The build is stamped with a `YYYYMMDD_shorthash` identifier visible in the server startup log (`build=20260623_a2590fa`). Users running the `:latest` tag get the update on their next container pull; users pinning a `:sha-<commit>` tag stay on that exact version until they explicitly bump.
 
 ---
 
